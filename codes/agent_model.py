@@ -1,0 +1,222 @@
+from agentpy import Agent, Model, Space, AgentList, animate
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd  
+from quiver import *
+from quiver import animation_plot
+from calcululations import *
+
+class myFish(Agent):
+
+    '''
+Initializing a single fish.
+'''
+
+    def setup(self):
+        
+        self.velocity = createUnitVector(np.random.random(2) - 0.5) #the directions would be random, can't take from a gaussian, plut let's just only deal with unit vectors
+        # distance of the repulsion zone
+        # distance of the attraction zone
+        # self.neighbor_r = 0
+        # self.neighbor_a = 0
+        # self.speed = p.speed
+        # self.max_angle =  #maximum angle of turning
+
+    def setupSpace(self, space):
+
+        self.space = space #the "environment" of the agents that AgentPy takes in
+        self.neighbors = space.neighbors #neighbors have the attribute space
+        self.position = space.positions[self] #position of the object in the space
+
+    def updateVelocity(self):
+        '''
+        if n_r > 0:
+            position_vector = - np.sum(r_ij/norm(r_ij)
+        '''
+        position = self.position #position of the ith agent
+        velocity = self.velocity 
+
+        neighbors_in_repulsion_zone = self.neighbors(self, self.p.distance_r)
+        neighbors_in_repulsion_zone = neighbors_in_repulsion_zone.to_list()
+        neighbor_r = len(neighbors_in_repulsion_zone) #might not need it at all
+        r_position = (neighbors_in_repulsion_zone.position)
+
+        alpha_angle = self.p.angle_of_perception
+
+        distance_o = self.p.distance_o
+        neighbors_in_orientation_zone = (self.neighbors(self, distance_o)).to_list()
+
+        for j in neighbors_in_orientation_zone:
+            for i in neighbors_in_repulsion_zone:
+                i_agent_id = i.id
+                j_agent_id = j.id
+                if i_agent_id == j_agent_id:
+                    index = list(neighbors_in_orientation_zone).index(j)
+                    del neighbors_in_orientation_zone[index]
+
+        neighbor_o = len(neighbors_in_orientation_zone)
+        o_velocity = (neighbors_in_orientation_zone.velocity)
+
+        neighbors_in_attraction_zone = (self.neighbors(self, self.p.distance_a)).to_list() #using the neighbors attribute of each agent through agentpy
+        # neighbors_in_attraction_zone = every_neighbors_in_attraction_zone - neighbors_in_orientation_zone - neighbors_in_repulsion_zone
+        for i in neighbors_in_attraction_zone:
+            for j in neighbors_in_repulsion_zone:
+                i_agent_id = i.id
+                j_agent_id = j.id
+
+                if i_agent_id == j_agent_id:
+                    index = list(neighbors_in_attraction_zone).index(i)
+                    del neighbors_in_attraction_zone[index]
+
+        for i in neighbors_in_attraction_zone:
+            for j in neighbors_in_orientation_zone:
+                i_agent_id = i.id
+                j_agent_id = j.id
+
+                if i_agent_id == j_agent_id:
+                    index = list(neighbors_in_attraction_zone).index(i)
+                    del neighbors_in_attraction_zone[index]
+
+        #Add a warning if the r_o is greater than r_a
+
+        neighbor_a = len(neighbors_in_attraction_zone)
+        a_position = (neighbors_in_attraction_zone.position)
+
+        if neighbor_r > 0 :
+        #repulsion rule has the most priority
+            # print(r_position, position)
+            diff = np.array(r_position - position, dtype=float)
+             #[cj-ci, ck - ci, and so on]
+            norm = np.linalg.norm(diff, axis=1) #keeping dimensions, here we get one array of all the values of norm in an array so [[1],[2]] which we then divide by every "array in the array" in diff
+            # print(norm)
+
+            diff[norm > 0] = diff[norm > 0] / norm[norm > 0][:, np.newaxis]
+            # print(diff)
+            direction_r = np.sum(diff, axis=0, keepdims=True)
+            direction = - direction_r[0] #taking the first/0th member of [[x, y, z]]
+            # print(direction)
+            # direction = createUnitVector(direction)
+            # print(direction)
+
+
+        else:
+            '''
+        Need to find a better way to do this but I had to take conditions for when neighbor_a is 0 and neighbor_o is not
+        
+        '''
+
+            if (neighbor_o > 0) and (neighbor_a > 0):
+                diff = np.array(o_velocity , dtype= float)
+                
+                norm = np.linalg.norm(diff, axis=1)
+                diff[norm > 0] = diff[norm > 0] / norm[norm > 0][:, np.newaxis]
+
+                direction_o = np.sum(diff, axis=0, keepdims=True)
+                # direction_o = createUnitVector(direction_o)
+
+                diff = np.array(a_position - (position), dtype= float)
+                norm = np.linalg.norm(diff, axis=1)
+                diff[norm > 0] = diff[norm > 0] / norm[norm > 0][:, np.newaxis]       
+                direction_a = np.sum(diff, axis=0, keepdims=True)
+                # direction_a = createUnitVector(direction_a)
+
+                direction = (direction_o[0] + direction_a[0])*0.5
+                direction = (direction)
+
+            elif neighbor_a == 0 and neighbor_o > 0 : 
+
+                diff = np.array(o_velocity, dtype= float)
+                norm = np.linalg.norm(diff, axis=1)
+                diff[norm > 0] = diff[norm > 0] / norm[norm > 0][:, np.newaxis]
+                direction_o = np.sum(diff, axis=0, keepdims=True)
+                direction = direction_o[0]
+                direction = (direction)
+
+            elif neighbor_o == 0 and neighbor_a > 0 :
+
+                diff = np.array(a_position - (position), dtype=float)
+                norm = np.linalg.norm(diff, axis=1)
+                diff[norm > 0] = diff[norm > 0] / norm[norm > 0][:, np.newaxis]
+
+                direction_a = np.sum(diff, axis=0, keepdims=True)
+
+                direction = direction_a[0]
+
+
+            else:
+                direction = velocity
+            # direction = createUnitVector(direction)
+
+            direction_U = createUnitVector(direction)
+            angle_between_dir_and_i = np.arccos(np.clip(np.dot(direction_U, velocity), -1.0, 1.0))
+
+            if angle_between_dir_and_i <= self.p.max_angle:
+                direction = direction 
+
+            else:
+                max_angle = (self.p.max_angle)     
+                cross = createUnitVector(np.linalg.det((velocity, direction)))   
+                rot = np.array([[np.cos(max_angle*cross), -np.sin(max_angle*cross)], [np.sin(max_angle*cross), np.cos(max_angle*cross)]])  # positive keeps same matrix
+                direction  = np.dot(rot, velocity)
+                
+        v4 = np.zeros(2)
+        d = self.p.border_distance
+        s = self.p.border_strength
+        for i in range(2):
+            if position[i] < d:
+                v4[i] += s
+            elif position[i] > self.space.shape[i] - d:
+                v4[i] -= s
+            # #Clipping the values given to arccos so that it remains between -1 and 1
+        # direction = createUnitVector(direction)
+
+        noise = np.random.normal(0, 0.05, 2) 
+
+        velocity += direction + v4 + noise
+        self.velocity = createUnitVector(velocity)
+ 
+    def update_position(self):
+        self.space.move_by(self, (self.velocity))
+
+class fishModel(Model):
+    def setup(self):
+        """ Initializes the agents and network of the model. 
+        
+        """
+        
+        self.space = Space(self, shape=[self.p.size]*2)
+        self.agents = AgentList(self, self.p.population, myFish)
+        self.space.add_agents(self.agents, random=True)
+        self.agents.setupSpace(self.space)
+
+    def step(self):
+        """ Defines the models' events per simulation step. """
+
+        self.agents.updateVelocity()  
+        self.agents.update_position() 
+        self.agents.record('velocity')
+        self.space.record_positions('position')
+
+if __name__ == "__main__":
+    param = {
+        "distance_r" : 1,
+        "distance_o" : 38,
+        "distance_a" : 40,
+        "speed" : 1,
+        "size" : 50,
+        'seed' : 7,
+        'steps' : 50,
+        "population" : 100,
+        'border_strength' : 10,
+        'border_distance': 1,
+        'ndim' : 2,
+        'max_angle' : 0.3,
+        'angle_of_perception' :2
+    }
+    model = fishModel(param)
+    results = model.run()    
+    data = animation_plot(fishModel, param)
+    with open("scatter_plot.html", "w") as file:
+        file.write(data.data)
+    df, grouped = updated_dataframe(results)
+    calculate_polarization(df, param)
